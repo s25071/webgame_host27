@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Jhin: The Virtuoso's Darkin Hunt</title>
+    <style>
+        body { margin: 0; background: #050505; color: white; font-family: 'Malgun Gothic', sans-serif; overflow: hidden; }
+        canvas { display: block; background: #0a0a0c; cursor: crosshair; }
+        
+        /* UI 스타일 */
+        #ui { position: absolute; top: 20px; left: 20px; pointer-events: none; user-select: none; }
+        .stat { font-size: 18px; margin-bottom: 5px; color: #aaa; }
+        #tier { font-size: 36px; font-weight: bold; margin-bottom: 10px; color: #fff; text-shadow: 0 0 10px gold; }
+        #hp-bar { width: 250px; height: 22px; background: #222; border: 2px solid #fff; }
+        #hp-inner { width: 100%; height: 100%; background: #900; transition: width 0.1s; }
+        
+        /* 탄환 UI */
+        #ammo-container { display: flex; gap: 5px; margin-top: 10px; }
+        .ammo-dot { width: 15px; height: 15px; border-radius: 50%; background: #333; border: 1px solid #555; }
+        .ammo-dot.active { background: #ffd700; box-shadow: 0 0 5px #ffd700; }
+        .ammo-dot.fourth { background: #f00; box-shadow: 0 0 10px #f00; }
+        
+        /* 보스 UI */
+        #boss-ui { position: absolute; top: 20px; width: 100%; text-align: center; display: none; }
+        #boss-name { font-size: 30px; font-weight: bold; color: #ff4d4d; text-shadow: 0 0 15px #000; }
+        #boss-hp-outer { width: 600px; height: 15px; background: #111; border: 1px solid #ff4d4d; margin: 10px auto; }
+        #boss-hp-inner { width: 100%; height: 100%; background: #ff4d4d; box-shadow: 0 0 10px #f00; }
+        
+        /* 스킬 쿨다운 UI */
+        #cooldowns { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; }
+        .skill { width: 70px; height: 70px; background: rgba(0,0,0,0.8); border: 2px solid #555; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .skill .key { color: #ffd700; font-weight: bold; font-size: 18px; }
+        .skill .overlay { position: absolute; bottom: 0; width: 100%; background: rgba(255,255,255,0.3); height: 0%; }
+
+        /* 게임 오버 화면 */
+        #death-screen { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.85); display: none; flex-direction: column; 
+            align-items: center; justify-content: center; z-index: 100;
+        }
+        #death-screen h1 { font-size: 60px; color: #900; margin-bottom: 20px; text-shadow: 0 0 20px red; }
+        #death-screen button { 
+            padding: 15px 40px; font-size: 24px; background: transparent; 
+            color: gold; border: 2px solid gold; cursor: pointer; transition: 0.3s;
+        }
+        #death-screen button:hover { background: gold; color: black; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div id="tier">아이언</div>
+    <div id="score" class="stat">점수: 0</div>
+    <div id="hp-bar"><div id="hp-inner"></div></div>
+    <div id="ammo-container">
+        <div class="ammo-dot" id="dot-1"></div>
+        <div class="ammo-dot" id="dot-2"></div>
+        <div class="ammo-dot" id="dot-3"></div>
+        <div class="ammo-dot" id="dot-4"></div>
+    </div>
+</div>
+
+<div id="boss-ui">
+    <div id="boss-name">다르킨</div>
+    <div id="boss-hp-outer"><div id="boss-hp-inner"></div></div>
+</div>
+
+<div id="cooldowns">
+    <div class="skill"><span class="key">Q</span><span>평타</span><div class="overlay" id="cool-Q"></div></div>
+    <div class="skill"><span class="key">E</span><span>저격</span><div class="overlay" id="cool-E"></div></div>
+    <div class="skill"><span class="key">R</span><span>덫</span><div class="overlay" id="cool-R"></div></div>
+</div>
+
+<div id="death-screen">
+    <h1>공연 종료</h1>
+    <p id="final-stats" style="font-size: 20px; margin-bottom: 30px;"></p>
+    <button onclick="restartGame()">다시 무대에 서기</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// --- 게임 상태 변수 ---
+let score, ammo, bossLevel, kills, gameOver, player, enemies, boss, projectiles, traps, bossProjectiles, minions, eCharge, keys;
+const cooldowns = { Q: 0, E: 0, R: 0 };
+const COOLDOWN_MAX = { Q: 35, E: 150, R: 200 };
+
+const TIERS = ["아이언", "브론즈", "실버", "골드", "플레티넘", "다이아몬드", "마스터", "챌린저"];
+const BOSS_NAMES = ["나피리", "바루스", "라아스트", "아트록스", "자헨"];
+
+function initGame() {
+    score = 0; ammo = 1; bossLevel = 0; kills = 0; gameOver = false;
+    player = { x: 200, y: canvas.height/2, r: 20, hp: 100, speed: 4 };
+    enemies = []; boss = null; projectiles = []; traps = []; bossProjectiles = []; minions = [];
+    eCharge = null; keys = {};
+    document.getElementById('death-screen').style.display = 'none';
+    document.getElementById('boss-ui').style.display = 'none';
+    updateAmmoUI();
+}
+
+function restartGame() { initGame(); requestAnimationFrame(update); }
+
+// --- 입력 처리 ---
+window.addEventListener('keydown', e => { 
+    keys[e.code] = true; 
+    if(!gameOver) {
+        if (e.code === 'KeyQ' && cooldowns.Q <= 0) useQ();
+        if (e.code === 'KeyE' && cooldowns.E <= 0) useE();
+        if (e.code === 'KeyR' && cooldowns.R <= 0) useR();
+    }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+let mouseX = 0, mouseY = 0;
+window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+
+// --- 진 스킬 구현 ---
+function useQ() {
+    const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+    projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*20, vy: Math.sin(angle)*20, r: ammo===4?14:7, dmg: ammo===4?180:45, isCrit: ammo===4 });
+    ammo = ammo >= 4 ? 1 : ammo + 1;
+    updateAmmoUI();
+    cooldowns.Q = COOLDOWN_MAX.Q;
+}
+
+function useE() {
+    eCharge = { timer: 60, angle: Math.atan2(mouseY - player.y, mouseX - player.x), x: player.x, y: player.y };
+    cooldowns.E = COOLDOWN_MAX.E;
+}
+
+function useR() {
+    traps.push({ x: mouseX, y: mouseY, r: 45, triggered: false, explosionTimer: 45 });
+    cooldowns.R = COOLDOWN_MAX.R;
+}
+
+function updateAmmoUI() {
+    for(let i=1; i<=4; i++) {
+        const dot = document.getElementById(`dot-${i}`);
+        if(dot) dot.className = 'ammo-dot' + (i < ammo ? ' active' : '') + (i === 4 && ammo === 4 ? ' active fourth' : '');
+    }
+}
+
+// --- 보스 시스템 ---
+function spawnBoss() {
+    const isAwakened = bossLevel >= 5;
+    const typeIndex = bossLevel % 5;
+    const dmgMult = isAwakened ? 1.6 : 1.0;
+    boss = {
+        name: (isAwakened ? "각성 " : "") + BOSS_NAMES[typeIndex],
+        hp: 400 + (bossLevel * 250), maxHp: 400 + (bossLevel * 250),
+        type: BOSS_NAMES[typeIndex], dmgMult: dmgMult, isAwakened: isAwakened,
+        x: canvas.width + 100, y: canvas.height/2, r: 65, t: 0, skillTimer: 80, 
+        moveX: canvas.width * 0.7, moveY: canvas.height/2
+    };
+    document.getElementById('boss-ui').style.display = 'block';
+    document.getElementById('boss-name').innerText = boss.name;
+}
+
+function update() {
+    if (gameOver) return;
+
+    // 플레이어 이동
+    if (keys['KeyW'] && player.y > player.r) player.y -= player.speed;
+    if (keys['KeyS'] && player.y < canvas.height - player.r) player.y += player.speed;
+    if (keys['KeyA'] && player.x > player.r) player.x -= player.speed;
+    if (keys['KeyD'] && player.x < canvas.width - player.r) player.x += player.speed;
+
+    // 쿨다운 차감
+    for (let k in cooldowns) if (cooldowns[k] > 0) {
+        cooldowns[k]--;
+        document.getElementById(`cool-${k}`).style.height = (cooldowns[k] / COOLDOWN_MAX[k] * 100) + "%";
+    }
+
+    // E 충전 저격
+    if (eCharge) {
+        if (--eCharge.timer <= 0) {
+            projectiles.push({ x: eCharge.x, y: eCharge.y, vx: Math.cos(eCharge.angle)*45, vy: Math.sin(eCharge.angle)*45, r: 8, dmg: 140, isSnipe: true });
+            eCharge = null;
+        }
+    }
+
+    // 적/보스 생성
+    if (enemies.length < 3 && !boss) enemies.push({ x: canvas.width + 50, y: Math.random()*canvas.height, r: 25, speed: 3.5 });
+    if (kills >= 10 && !boss) { kills = 0; spawnBoss(); }
+
+    enemies.forEach((en, i) => {
+        en.x -= en.speed;
+        if (Math.hypot(player.x - en.x, player.y - en.y) < player.r + en.r) player.hp -= 0.6;
+        if (en.x < -50) enemies.splice(i, 1);
+    });
+
+    if (boss) {
+        // 보스 지능형 이동
+        boss.t += 0.03;
+        if (Math.hypot(boss.x - boss.moveX, boss.y - boss.moveY) < 30) {
+            boss.moveX = canvas.width * (0.5 + Math.random() * 0.4);
+            boss.moveY = Math.random() * canvas.height;
+        }
+        boss.x += (boss.moveX - boss.x) * 0.025;
+        boss.y += (boss.moveY - boss.y) * 0.025;
+
+        if (--boss.skillTimer <= 0) {
+            executeBossSkill();
+            boss.skillTimer = 110;
+        }
+    }
+
+    // 투사체 처리
+    projectiles = projectiles.filter(p => {
+        p.x += p.vx; p.y += p.vy;
+        let hit = false;
+        [...enemies, ...minions].forEach(en => {
+            if (!hit && Math.hypot(p.x - en.x, p.y - en.y) < p.r + en.r) {
+                if (enemies.includes(en)) { enemies.splice(enemies.indexOf(en), 1); kills++; score += 20; }
+                else minions.splice(minions.indexOf(en), 1);
+                hit = true;
+            }
+        });
+        if (!hit && boss && Math.hypot(p.x - boss.x, p.y - boss.y) < p.r + boss.r) { boss.hp -= p.dmg; hit = true; }
+        return !hit && p.x > 0 && p.x < canvas.width && p.y > 0 && p.y < canvas.height;
+    });
+
+    // 덫/미니언/보스투사체
+    traps.forEach(tr => {
+        if (!tr.triggered) {
+            [...enemies, ...minions, boss].forEach(en => { if (en && Math.hypot(tr.x - en.x, tr.y - en.y) < tr.r + en.r) tr.triggered = true; });
+        } else {
+            tr.explosionTimer--;
+            if (boss && Math.hypot(tr.x - boss.x, tr.y - boss.y) < tr.r + 80) { boss.x += (tr.x - boss.x)*0.03; boss.y += (tr.y - boss.y)*0.03; }
+            if (tr.explosionTimer === 0) {
+                enemies.forEach((en, i) => { if(Math.hypot(tr.x - en.x, tr.y - en.y) < 130) { enemies.splice(i, 1); kills++; }});
+                if (boss && Math.hypot(tr.x - boss.x, tr.y - boss.y) < 130) boss.hp -= 120;
+            }
+        }
+    });
+    traps = traps.filter(tr => tr.explosionTimer > 0);
+
+    bossProjectiles = bossProjectiles.filter(bp => {
+        bp.x += bp.vx; bp.y += bp.vy;
+        if (Math.hypot(player.x - bp.x, player.y - bp.y) < player.r + bp.r) { player.hp -= bp.dmg; return false; }
+        return bp.x > -250 && bp.x < canvas.width + 250 && bp.y > -250 && bp.y < canvas.height + 250;
+    });
+
+    minions.forEach(m => {
+        const a = Math.atan2(player.y - m.y, player.x - m.x);
+        m.x += Math.cos(a) * 3.5; m.y += Math.sin(a) * 3.5;
+        if (Math.hypot(player.x - m.x, player.y - m.y) < player.r + m.r) player.hp -= 0.4;
+    });
+
+    // 보스 사망 시
+    if (boss && boss.hp <= 0) {
+        boss = null; bossLevel++; player.hp = Math.min(100, player.hp + 50);
+        document.getElementById('boss-ui').style.display = 'none';
+        minions = []; bossProjectiles = [];
+    }
+
+    // UI 동기화
+    document.getElementById('tier').innerText = TIERS[Math.min(bossLevel, 7)];
+    document.getElementById('hp-inner').style.width = Math.max(0, player.hp) + "%";
+    if (boss) document.getElementById('boss-hp-inner').style.width = (boss.hp/boss.maxHp)*100 + "%";
+    document.getElementById('score').innerText = `점수: ${score}`;
+
+    // 게임 오버 체크
+    if (player.hp <= 0) {
+        gameOver = true;
+        document.getElementById('death-screen').style.display = 'flex';
+        document.getElementById('final-stats').innerText = `최종 점수: ${score} | 도달 티어: ${TIERS[Math.min(bossLevel, 7)]}`;
+    }
+
+    draw();
+    if(!gameOver) requestAnimationFrame(update);
+}
+
+function executeBossSkill() {
+    const d = boss.dmgMult;
+    const dogLimit = boss.isAwakened ? 7 : 5; // 사냥개 수 제한 요청 사항 반영
+
+    switch(boss.type) {
+        case "나피리":
+            if (minions.length < dogLimit) {
+                for(let i=0; i<2; i++) if(minions.length < dogLimit) minions.push({ x: boss.x, y: boss.y, r: 15 });
+            }
+            break;
+        case "바루스":
+            for(let i=0; i<6; i++) {
+                setTimeout(() => { if(boss) bossProjectiles.push({ x: boss.x, y: boss.y, vx: -22, vy: (player.y - boss.y)*0.045, r: 8, dmg: 10*d, c: "purple" }); }, i * 180);
+            }
+            break;
+        case "라아스트":
+            const tx = player.x + (Math.random()-0.5)*180;
+            const ty = player.y + (Math.random()-0.5)*180;
+            boss.x = tx; boss.y = ty;
+            bossProjectiles.push({ x: tx, y: ty, vx: 0, vy: 0, r: 160, dmg: 35*d, c: "rgba(255,0,0,0.4)", life: 25 });
+            break;
+        case "아트록스":
+            const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+            bossProjectiles.push({ x: boss.x, y: boss.y, angle: angle, r: 380, dmg: 45*d, type: "fan", life: 45 });
+            break;
+        case "자헨":
+            for(let i=0; i<10; i++) {
+                setTimeout(() => { 
+                    if(boss) {
+                        const a = Math.atan2(player.y - boss.y, player.x - boss.x);
+                        bossProjectiles.push({ x: boss.x, y: boss.y, vx: Math.cos(a)*28, vy: Math.sin(a)*28, r: 10, dmg: 12*d, c: "pink" });
+                    }
+                }, i * 90);
+            }
+            break;
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // E 저격선
+    if (eCharge) {
+        ctx.beginPath(); ctx.moveTo(eCharge.x, eCharge.y);
+        ctx.lineTo(eCharge.x + Math.cos(eCharge.angle)*canvas.width, eCharge.y + Math.sin(eCharge.angle)*canvas.width);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${1 - eCharge.timer/60})`; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    // 덫
+    traps.forEach(tr => {
+        ctx.beginPath(); ctx.arc(tr.x, tr.y, tr.r, 0, Math.PI*2);
+        ctx.strokeStyle = tr.triggered ? "red" : "gold"; ctx.stroke();
+        if(tr.triggered) { ctx.fillStyle = "rgba(255,0,0,0.2)"; ctx.fill(); }
+    });
+
+    // 보스 장판/스킬
+    bossProjectiles.forEach(bp => {
+        if (bp.type === "fan") {
+            ctx.beginPath(); ctx.moveTo(bp.x, bp.y);
+            ctx.arc(bp.x, bp.y, bp.r, bp.angle - 0.55, bp.angle + 0.55);
+            ctx.fillStyle = "rgba(150, 0, 0, 0.2)"; ctx.fill();
+            // Sweet Spot (끝부분)
+            ctx.beginPath(); ctx.arc(bp.x, bp.y, bp.r, bp.angle - 0.55, bp.angle + 0.55);
+            ctx.lineWidth = 25; ctx.strokeStyle = "rgba(255, 0, 0, 0.6)"; ctx.stroke();
+            if (bp.life === 1) {
+                const dist = Math.hypot(player.x - bp.x, player.y - bp.y);
+                const a = Math.atan2(player.y - bp.y, player.x - bp.x);
+                if (dist < bp.r && dist > bp.r - 60 && Math.abs(a - bp.angle) < 0.55) player.hp -= bp.dmg;
+                else if (dist < bp.r) player.hp -= bp.dmg * 0.3;
+            }
+            bp.life--;
+        } else if (bp.life) {
+            ctx.beginPath(); ctx.arc(bp.x, bp.y, bp.r, 0, Math.PI*2); ctx.fillStyle = bp.c; ctx.fill();
+            if (bp.life === 1 && Math.hypot(player.x - bp.x, player.y - bp.y) < bp.r) player.hp -= bp.dmg;
+            bp.life--;
+        } else {
+            ctx.beginPath(); ctx.arc(bp.x, bp.y, bp.r, 0, Math.PI*2); ctx.fillStyle = bp.c; ctx.fill();
+        }
+    });
+
+    // 아군/적군 투사체
+    projectiles.forEach(p => {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fillStyle = p.isCrit ? "#f00" : (p.isSnipe ? "#0ff" : "#ffd700"); ctx.fill();
+    });
+
+    // 플레이어/적/미니언
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+    ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = "gold"; ctx.lineWidth = 3; ctx.stroke();
+    
+    enemies.forEach(en => { ctx.beginPath(); ctx.arc(en.x, en.y, en.r, 0, Math.PI*2); ctx.fillStyle = "#333"; ctx.fill(); });
+    minions.forEach(m => { ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI*2); ctx.fillStyle = "#800"; ctx.fill(); });
+
+    if (boss) {
+        ctx.beginPath(); ctx.arc(boss.x, boss.y, boss.r, 0, Math.PI*2);
+        ctx.fillStyle = "#1a0000"; ctx.fill(); ctx.strokeStyle = "red"; ctx.lineWidth = 4; ctx.stroke();
+        ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
+        ctx.fillText(boss.name, boss.x, boss.y + 7);
+    }
+}
+
+// 게임 시작
+initGame();
+requestAnimationFrame(update);
+window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+</script>
+</body>
+</html>
