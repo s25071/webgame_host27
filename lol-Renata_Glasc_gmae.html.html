@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>레나타 글라스크: 자운의 지배자</title>
+    <style>
+        body { background: #1a1a2e; color: white; text-align: center; font-family: sans-serif; }
+        .arena { display: flex; justify-content: center; gap: 20px; margin-top: 50px; }
+        .champion { border: 2px solid #00d2ff; padding: 20px; border-radius: 10px; width: 150px; }
+        .dead { opacity: 0.3; border-color: red; }
+        button { padding: 15px 30px; font-size: 18px; margin-top: 30px; cursor: pointer; background: #ff4757; color: white; border: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>레나타 글라스크: 적대적 인수</h1>
+    <p>궁극기를 사용하여 자운의 챔피언들이 서로 싸우게 만드세요!</p>
+
+    <div class="arena" id="arena"></div>
+
+    <button onclick="useUltimate()">궁극기 사용 (적대적 인수)</button>
+    <p id="log">전투 대기 중...</p>
+
+    <script>
+        let champions = [
+            { name: "징크스", hp: 100 },
+            { name: "에코", hp: 100 },
+            { name: "빅토르", hp: 100 }
+        ];
+
+        function render() {
+            const arena = document.getElementById('arena');
+            arena.innerHTML = '';
+            champions.forEach(c => {
+                arena.innerHTML += `<div class="champion ${c.hp <= 0 ? 'dead' : ''}">
+                    <h3>${c.name}</h3>
+                    <p>HP: ${c.hp > 0 ? c.hp : 0}</p>
+                </div>`;
+            });
+        }
+
+        function useUltimate() {
+            let living = champions.filter(c => c.hp > 0);
+            if (living.length <= 1) {
+                alert("전투 종료!");
+                return;
+            }
+
+            // 적들이 서로를 공격 (세뇌 상태)
+            living.forEach(attacker => {
+                let targets = living.filter(t => t !== attacker);
+                let target = targets[Math.floor(Math.random() * targets.length)];
+                let damage = Math.floor(Math.random() * 20) + 10;
+                target.hp -= damage;
+            });
+
+            document.getElementById('log').innerText = "레나타가 궁극기를 사용했습니다! 적들이 서로를 공격합니다!";
+            render();
+        }
+
+        render();
+    </script>
+</body>
+</html>
