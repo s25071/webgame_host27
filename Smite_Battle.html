@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>바론 강타 싸움 (Smite Battle)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #050b14;
+            color: #f0e6d2;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        h1 {
+            color: #c8aa6e;
+            font-size: 26px;
+            letter-spacing: 1px;
+            text-shadow: 0 0 12px rgba(200, 170, 110, 0.6);
+            margin-bottom: 5px;
+        }
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 15px;
+            color: #a09b8c;
+            justify-content: center;
+            align-items: center;
+        }
+        .stats-bar span b {
+            color: #00d2ff;
+        }
+
+        /* 850px x 380px 규격 */
+        #game-wrapper {
+            position: relative;
+            width: 850px;
+            height: 380px;
+            border: 3px solid #785a28;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 50px rgba(0,0,0,0.7);
+            background: radial-gradient(circle at 50% 30%, #15102a 0%, #06050e 100%);
+            cursor: default;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 하단 컨트롤 */
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .btn {
+            background: linear-gradient(180deg, #1e2328, #111519);
+            border: 2px solid #c8aa6e;
+            color: #f0e6d2;
+            padding: 9px 22px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .btn:hover {
+            border-color: #f0e6d2;
+            background: #1e282d;
+        }
+        .btn:active {
+            transform: scale(0.96);
+        }
+        .btn-smite {
+            border-color: #00d2ff;
+            color: #00ffff;
+            background: linear-gradient(180deg, #092c3e, #05141e);
+            box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
+        }
+        .btn-restart {
+            border-color: #e84057;
+            color: #ff7688;
+        }
+        .btn-restart:hover {
+            border-color: #ff7688;
+            color: #fff;
+        }
+
+        .instruction {
+            color: #a09b8c;
+            font-size: 13.5px;
+            line-height: 1.6;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .instruction span { color: #f0e6d2; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <h1>바론 강타 싸움</h1>
+        <div class="stats-bar">
+            <span>현재 스테이지: <b id="stage-txt">1</b></span>
+            <span>최고 기록: <b id="best-stage-txt">1</b></span>
+            <span>강타 데미지: <b style="color:#ffea00;">1200</b></span>
+        </div>
+    </div>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="850" height="380"></canvas>
+    </div>
+
+    <div id="controls">
+        <button class="btn btn-smite" onclick="triggerPlayerSmite()">⚡ 강타 (D 키)</button>
+        <button class="btn btn-restart" onclick="restartGame()">🔄 다시 시작 (R)</button>
+    </div>
+
+    <div class="instruction">
+        🖱️ <b>이동:</b> <span>마우스 클릭</span>으로 이동해 날아오는 스킬을 피하세요!<br>
+        ⚡ <b>강타:</b> 바론 체력이 <b>1200 이하</b>가 되는 순간 키보드 <span>[D]</span> 키로 강타를 꽂으세요!<br>
+        ⌨️ <b>리겜 단축키:</b> <span>[R]</span> 키로 언제든 1단계부터 재시작 가능
+    </div>
+
+    <script>
+        // Web Audio API 사운드 효과
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+
+            if (type === 'smite') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(60, now + 0.35);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'laser') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(1100, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'hit') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'win') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554.37, now + 0.12);
+                osc.frequency.setValueAtTime(659.25, now + 0.24);
+                osc.frequency.setValueAtTime(880, now + 0.36);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.6);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.6);
+            }
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 게임 변수
+        let stage = 1;
+        let bestStage = 1;
+        let isGameOver = false;
+        let isStageCleared = false;
+        let gameStatusText = "";
+
+        // 바론 설정
+        const MAX_BARON_HP = 7500;
+        let baronHp = MAX_BARON_HP;
+        const SMITE_DAMAGE = 1200;
+        let dpsInterval = null;
+        let enemySmiteTimeout = null;
+        let skillSpawnTimer = 0;
+
+        // 플레이어 정글러
+        const player = {
+            x: 425,
+            y: 290,
+            targetX: 425,
+            targetY: 290,
+            speed: 5.2,
+            radius: 16,
+            stunTimer: 0,
+            color: '#00ffff'
+        };
+
+        let skillshots = [];
+        let particles = [];
+        let movePings = [];
+
+        function updateHUD() {
+            document.getElementById('stage-txt').innerText = stage;
+            document.getElementById('best-stage-txt').innerText = bestStage;
+        }
+
+        function initStage() {
+            isGameOver = false;
+            isStageCleared = false;
+            baronHp = MAX_BARON_HP;
+            skillshots = [];
+            particles = [];
+            movePings = [];
+            player.x = 425;
+            player.y = 290;
+            player.targetX = 425;
+            player.targetY = 290;
+            player.stunTimer = 0;
+            skillSpawnTimer = 0;
+
+            if (stage === 1) {
+                gameStatusText = "STAGE 1 - 체력이 1200 이하일 때 정확히 [D] 강타를 누르세요!";
+            } else {
+                gameStatusText = `STAGE ${stage} - 스킬을 피하며 1200 이하에 [D] 강타!`;
+            }
+
+            if (dpsInterval) clearInterval(dpsInterval);
+            if (enemySmiteTimeout) clearTimeout(enemySmiteTimeout);
+
+            updateHUD();
+            startBaronDPS();
+        }
+
+        function startBaronDPS() {
+            const baseDpsSpeed = Math.max(35, 65 - stage * 4);
+
+            dpsInterval = setInterval(() => {
+                if (isGameOver || isStageCleared) return;
+
+                let dmg = stage === 1 ? 55 : (60 + Math.random() * 70);
+
+                if (stage >= 3 && Math.random() < 0.12) {
+                    dmg += 180 + Math.random() * 200;
+                }
+
+                baronHp = Math.max(0, baronHp - dmg);
+
+                // 스킬 스폰 (1단계는 완전 미출현)
+                if (stage >= 2) {
+                    skillSpawnTimer++;
+                    const spawnThreshold = Math.max(18, 45 - stage * 4);
+                    if (skillSpawnTimer >= spawnThreshold) {
+                        skillSpawnTimer = 0;
+                        spawnRandomSkillshot();
+                    }
+                }
+
+                // 1200 이하 진입 시 상대 반응 타이머
+                if (baronHp <= SMITE_DAMAGE && !enemySmiteTimeout && !isStageCleared) {
+                    const enemyReactTime = Math.max(180, 850 - stage * 110);
+                    
+                    enemySmiteTimeout = setTimeout(() => {
+                        if (!isStageCleared && !isGameOver) {
+                            enemyStoleBaron();
+                        }
+                    }, enemyReactTime);
+                }
+            }, baseDpsSpeed);
+        }
+
+        function spawnRandomSkillshot() {
+            if (stage === 2) {
+                const fromLeft = Math.random() > 0.5;
+                skillshots.push({
+                    type: 'projectile',
+                    x: fromLeft ? 0 : canvas.width,
+                    y: 190 + Math.random() * 140,
+                    vx: (fromLeft ? 1 : -1) * 2.8,
+                    radius: 13,
+                    color: '#a335ee'
+                });
+            } else {
+                const roll = Math.random();
+                const warnTime = Math.max(650, 1100 - stage * 60);
+
+                if (roll < 0.45) {
+                    const isVertical = Math.random() > 0.4;
+                    const targetPos = isVertical ? player.x + (Math.random() * 80 - 40) : player.y + (Math.random() * 60 - 30);
+                    
+                    skillshots.push({
+                        type: 'laser',
+                        isVertical: isVertical,
+                        pos: targetPos,
+                        width: 38,
+                        warnTime: warnTime,
+                        startTime: performance.now(),
+                        active: false
+                    });
+                } else if (roll < 0.75) {
+                    const fromLeft = Math.random() > 0.5;
+                    skillshots.push({
+                        type: 'projectile',
+                        x: fromLeft ? 0 : canvas.width,
+                        y: 180 + Math.random() * 150,
+                        vx: (fromLeft ? 1 : -1) * (3.0 + stage * 0.25),
+                        radius: 14,
+                        color: '#a335ee'
+                    });
+                } else {
+                    skillshots.push({
+                        type: 'circleAoE',
+                        x: player.x + (Math.random() * 80 - 40),
+                        y: player.y + (Math.random() * 50 - 25),
+                        radius: 40,
+                        warnTime: warnTime,
+                        startTime: performance.now(),
+                        duration: 800
+                    });
+                }
+            }
+        }
+
+        function triggerPlayerSmite() {
+            if (isGameOver || isStageCleared) return;
+
+            if (player.stunTimer > 0) {
+                createFloatingText("CC에 걸려 강타를 쓸 수 없습니다!", player.x, player.y - 25, '#ff4444');
+                return;
+            }
+
+            playSound('smite');
+            createSmiteVFX(canvas.width / 2, 85);
+
+            if (baronHp <= SMITE_DAMAGE && baronHp > 0) {
+                isStageCleared = true;
+                clearInterval(dpsInterval);
+                clearTimeout(enemySmiteTimeout);
+                playSound('win');
+
+                baronHp = 0;
+                stage++;
+                if (stage > bestStage) bestStage = stage;
+                updateHUD();
+
+                gameStatusText = "🏆 바론 처치 성공! 50:50 강타 싸움 승리!";
+                setTimeout(initStage, 1800);
+
+            } else if (baronHp > SMITE_DAMAGE) {
+                gameOver(`스마가 너무 빨랐습니다! (남은 체력: ${Math.round(baronHp)} > 1200)`);
+            }
+        }
+
+        function enemyStoleBaron() {
+            playSound('smite');
+            createSmiteVFX(canvas.width / 2, 85);
+            gameOver("적 정글러에게 바론을 스틸당했습니다!");
+        }
+
+        function gameOver(reason) {
+            isGameOver = true;
+            clearInterval(dpsInterval);
+            clearTimeout(enemySmiteTimeout);
+            gameStatusText = `❌ ${reason} [R]로 재도전`;
+        }
+
+        function restartGame() {
+            stage = 1;
+            clearInterval(dpsInterval);
+            clearTimeout(enemySmiteTimeout);
+            initStage();
+        }
+
+        function addMovePing(x, y) {
+            movePings.push({
+                x: x,
+                y: y,
+                radius: 4,
+                alpha: 1.0
+            });
+        }
+
+        function createSmiteVFX(x, y) {
+            for (let i = 0; i < 30; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 3 + Math.random() * 8;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1.0,
+                    color: Math.random() > 0.5 ? '#ffff00' : '#00ffff',
+                    size: 4
+                });
+            }
+        }
+
+        function createFloatingText(txt, x, y, color) {
+            particles.push({
+                isText: true,
+                text: txt,
+                x: x,
+                y: y,
+                vy: -1,
+                life: 1.0,
+                color: color
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const now = performance.now();
+
+            // 1. 바론 둥지 배경
+            ctx.fillStyle = "rgba(10, 5, 20, 0.4)";
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, 70, 160, 0, Math.PI);
+            ctx.fill();
+
+            // 2. 바론 본체 & HP 바
+            ctx.save();
+            ctx.fillStyle = "#7928ca";
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, 70, 55, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "#b800ff";
+            ctx.stroke();
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 15px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("바론 내셔", canvas.width / 2, 75);
+
+            const barW = 440;
+            const barH = 22;
+            const barX = (canvas.width - barW) / 2;
+            const barY = 135;
+
+            ctx.fillStyle = "#111";
+            ctx.fillRect(barX, barY, barW, barH);
+            ctx.strokeStyle = "#785a28";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(barX, barY, barW, barH);
+
+            const hpRatio = Math.max(0, baronHp / MAX_BARON_HP);
+            const isSmiteRange = baronHp <= SMITE_DAMAGE;
+            ctx.fillStyle = isSmiteRange ? "#ff0055" : "#9900ef";
+            ctx.fillRect(barX + 1, barY + 1, (barW - 2) * hpRatio, barH - 2);
+
+            // 1200 눈금선
+            const smiteLineX = barX + (barW * (SMITE_DAMAGE / MAX_BARON_HP));
+            ctx.strokeStyle = "#ffff00";
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(smiteLineX, barY - 4);
+            ctx.lineTo(smiteLineX, barY + barH + 4);
+            ctx.stroke();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 13px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(`${Math.round(baronHp)} / ${MAX_BARON_HP} HP ${isSmiteRange ? '⚡ [D 강타 킬각!]' : ''}`, canvas.width / 2, barY + 16);
+            ctx.restore();
+
+            // 3. 이동 핑
+            for (let i = movePings.length - 1; i >= 0; i--) {
+                const mp = movePings[i];
+                mp.radius += 0.8;
+                mp.alpha -= 0.04;
+                if (mp.alpha <= 0) {
+                    movePings.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.strokeStyle = `rgba(0, 255, 120, ${mp.alpha})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(mp.x, mp.y, mp.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 4. 스킬샷
+            for (let i = skillshots.length - 1; i >= 0; i--) {
+                const s = skillshots[i];
+
+                if (s.type === 'laser') {
+                    const elapsed = now - s.startTime;
+                    if (elapsed < s.warnTime) {
+                        ctx.strokeStyle = "rgba(255, 0, 80, 0.4)";
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([6, 6]);
+                        ctx.beginPath();
+                        if (s.isVertical) {
+                            ctx.moveTo(s.pos, 0); ctx.lineTo(s.pos, canvas.height);
+                        } else {
+                            ctx.moveTo(0, s.pos); ctx.lineTo(canvas.width, s.pos);
+                        }
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    } else if (elapsed < s.warnTime + 260) {
+                        if (!s.active) {
+                            playSound('laser');
+                            s.active = true;
+                        }
+                        ctx.fillStyle = "rgba(255, 50, 120, 0.85)";
+                        ctx.shadowColor = "#ff0055";
+                        ctx.shadowBlur = 15;
+                        if (s.isVertical) {
+                            ctx.fillRect(s.pos - s.width / 2, 0, s.width, canvas.height);
+                            if (Math.abs(player.x - s.pos) < s.width / 2 + player.radius) {
+                                playerGetStunned("럭스 궁에 맞아 기절했습니다!");
+                            }
+                        } else {
+                            ctx.fillRect(0, s.pos - s.width / 2, canvas.width, s.width);
+                            if (Math.abs(player.y - s.pos) < s.width / 2 + player.radius) {
+                                playerGetStunned("럭스 궁에 맞아 기절했습니다!");
+                            }
+                        }
+                        ctx.shadowBlur = 0;
+                    } else {
+                        skillshots.splice(i, 1);
+                    }
+
+                } else if (s.type === 'projectile') {
+                    s.x += s.vx;
+                    ctx.save();
+                    ctx.fillStyle = s.color;
+                    ctx.shadowColor = s.color;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    if (Math.hypot(player.x - s.x, player.y - s.y) < player.radius + s.radius) {
+                        playerGetStunned("모르가나 속박에 맞았습니다!");
+                        skillshots.splice(i, 1);
+                    } else if (s.x < -30 || s.x > canvas.width + 30) {
+                        skillshots.splice(i, 1);
+                    }
+
+                } else if (s.type === 'circleAoE') {
+                    const elapsed = now - s.startTime;
+                    if (elapsed < s.warnTime) {
+                        ctx.strokeStyle = "rgba(255, 100, 0, 0.5)";
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                        ctx.stroke();
+                    } else if (elapsed < s.warnTime + s.duration) {
+                        ctx.fillStyle = "rgba(255, 60, 0, 0.4)";
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        if (Math.hypot(player.x - s.x, player.y - s.y) < player.radius + s.radius) {
+                            playerGetStunned("럼블 이퀄 장판에 불타고 있습니다!");
+                        }
+                    } else {
+                        skillshots.splice(i, 1);
+                    }
+                }
+            }
+
+            // 5. 플레이어 이동
+            if (!isGameOver) {
+                if (player.stunTimer > 0) {
+                    player.stunTimer--;
+                } else {
+                    const dx = player.targetX - player.x;
+                    const dy = player.targetY - player.y;
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dist > 3) {
+                        player.x += (dx / dist) * player.speed;
+                        player.y += (dy / dist) * player.speed;
+                    }
+                }
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.stunTimer > 0 ? "#ffdd00" : player.color;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#ffffff";
+            ctx.stroke();
+
+            ctx.fillStyle = "#000";
+            ctx.font = "bold 10px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(player.stunTimer > 0 ? "스턴!" : "나", player.x, player.y);
+            ctx.restore();
+
+            // 6. 파티클
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= 0.025;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                if (p.isText) {
+                    p.y += p.vy;
+                    ctx.save();
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.font = "bold 14px sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.fillText(p.text, p.x, p.y);
+                    ctx.restore();
+                } else {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    ctx.save();
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            // 7. 안내 문구
+            if (gameStatusText) {
+                ctx.save();
+                ctx.font = "bold 17px sans-serif";
+                ctx.fillStyle = isGameOver ? "#e84057" : (isStageCleared ? "#0ac8b9" : "#c8aa6e");
+                ctx.textAlign = "center";
+                ctx.shadowColor = "#000";
+                ctx.shadowBlur = 6;
+                ctx.fillText(gameStatusText, canvas.width / 2, canvas.height - 18);
+                ctx.restore();
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function playerGetStunned(reason) {
+            if (player.stunTimer <= 0) {
+                playSound('hit');
+                player.stunTimer = 24;
+                createFloatingText("⚠️ 기절!", player.x, player.y - 20, '#ffea00');
+            }
+        }
+
+        function handleCanvasClick(e) {
+            e.preventDefault();
+            if (isGameOver || player.stunTimer > 0) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            let clickY = e.clientY - rect.top;
+
+            clickY = Math.max(175, Math.min(canvas.height - 20, clickY));
+
+            player.targetX = clickX;
+            player.targetY = clickY;
+            addMovePing(clickX, clickY);
+        }
+
+        canvas.addEventListener('mousedown', handleCanvasClick);
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // [D] 강타, [R] 다시 시작 키 매핑
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const key = e.key.toLowerCase();
+
+            if (key === 'd' || key === 'f') {
+                e.preventDefault();
+                triggerPlayerSmite();
+            } else if (key === 'r') {
+                e.preventDefault();
+                restartGame();
+            }
+        });
+
+        initStage();
+        requestAnimationFrame(draw);
+    </script>
+</body>
+</html>

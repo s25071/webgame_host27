@@ -27,7 +27,7 @@
       padding: 40px 20px;
     }
 
-    /* 메인 타이틀 & 헤더 */
+    /* 헤더 */
     .header {
       text-align: center;
       margin-bottom: 40px;
@@ -60,28 +60,28 @@
       font-size: 16px;
     }
 
-    /* 게임 카드 그리드 */
+    /* 3개 카드 그리드 */
     .game-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 28px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
       width: 100%;
-      max-width: 860px;
+      max-width: 1080px;
     }
 
-    /* 게임 카드 스타일 */
+    /* 게임 카드 */
     .game-card {
       position: relative;
       background: linear-gradient(180deg, #1e282d 0%, #0a141e 100%);
       border: 2px solid #785a28;
       border-radius: 12px;
-      padding: 30px 26px;
+      padding: 26px 22px;
       text-decoration: none;
       color: inherit;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      min-height: 240px;
+      min-height: 250px;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
       transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
       overflow: hidden;
@@ -114,17 +114,17 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .game-icon {
-      font-size: 38px;
+      font-size: 36px;
     }
 
     .game-tag {
       font-size: 11px;
       font-weight: bold;
-      padding: 4px 10px;
+      padding: 4px 9px;
       border-radius: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -142,9 +142,15 @@
       border: 1px solid rgba(0, 210, 255, 0.4);
     }
 
-    /* 카드 텍스트 */
+    .tag-smite {
+      background: rgba(255, 215, 0, 0.2);
+      color: #ffea00;
+      border: 1px solid rgba(255, 215, 0, 0.4);
+    }
+
+    /* 텍스트 */
     .game-title {
-      font-size: 22px;
+      font-size: 21px;
       font-weight: bold;
       color: #f0e6d2;
       margin-bottom: 10px;
@@ -156,24 +162,24 @@
     }
 
     .game-desc {
-      font-size: 14px;
+      font-size: 13.5px;
       color: #a09b8c;
-      line-height: 1.6;
-      margin-bottom: 24px;
+      line-height: 1.55;
+      margin-bottom: 20px;
     }
 
-    /* 플레이 버튼 UI */
+    /* 플레이 버튼 */
     .play-btn {
       align-self: flex-start;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: bold;
       color: #c8aa6e;
       background: rgba(200, 170, 110, 0.1);
       border: 1px solid rgba(200, 170, 110, 0.3);
-      padding: 8px 18px;
+      padding: 7px 16px;
       border-radius: 4px;
       transition: all 0.2s;
     }
@@ -191,10 +197,11 @@
       text-align: center;
     }
 
-    /* 모바일 반응형 */
-    @media (max-width: 768px) {
+    /* 반응형 */
+    @media (max-width: 980px) {
       .game-grid {
         grid-template-columns: 1fr;
+        max-width: 500px;
       }
     }
   </style>
@@ -204,7 +211,7 @@
   <div class="header">
     <div class="title-badge">LOL MINI GAME ARENA</div>
     <h1>🎮 나의 롤 미니게임 놀이터</h1>
-    <p class="subtitle">반응속도와 예측 에임을 시험해 보세요!</p>
+    <p class="subtitle">반응속도, 예측 에임, 강타 타이밍을 시험해 보세요!</p>
   </div>
 
   <div class="game-grid">
@@ -214,11 +221,11 @@
       <div>
         <div class="card-top">
           <div class="game-icon">🪨</div>
-          <span class="game-tag tag-react">반응속도 훈련</span>
+          <span class="game-tag tag-react">반응속도</span>
         </div>
         <div class="game-title">바위로 계란 치기</div>
         <p class="game-desc">
-          말파이트의 멈출 수 없는 힘(R)을 점멸로 피하세요!<br>
+          말파이트의 멈출 수 없는 힘을 점멸로 피하세요!<br>
           마공벨트와 점멸 훼이크 심리전에 낚이지 마세요.
         </p>
       </div>
@@ -230,12 +237,28 @@
       <div>
         <div class="card-top">
           <div class="game-icon">⚡</div>
-          <span class="game-tag tag-aim">예측 에임 훈련</span>
+          <span class="game-tag tag-aim">예측 에임</span>
         </div>
         <div class="game-title">Are You Hitscan?</div>
         <p class="game-desc">
           화려하게 도망치는 상대를 비전 폭격으로 저격하세요!<br>
           0.55초 탄속 딜레이와 연사 제한을 계산해 맞춰야 합니다.
+        </p>
+      </div>
+      <div class="play-btn">플레이 하기 ➔</div>
+    </a>
+
+    <!-- 3. 바론 강타 싸움 -->
+    <a href="./Smite_Battle.html" class="game-card">
+      <div>
+        <div class="card-top">
+          <div class="game-icon">🐉</div>
+          <span class="game-tag tag-smite">타이밍 & 회피</span>
+        </div>
+        <div class="game-title">바론 강타 싸움</div>
+        <p class="game-desc">
+          쏟아지는 한타 스킬을 피하며 1200 체력에 강타를 꽂으세요!<br>
+          0.1초 차이로 상대 정글러보다 먼저 스틸해야 합니다.
         </p>
       </div>
       <div class="play-btn">플레이 하기 ➔</div>
