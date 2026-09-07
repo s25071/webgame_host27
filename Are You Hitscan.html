@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>제라스 궁 저격 훈련소 (Rite of the Arcane)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #050b14;
+            color: #f0e6d2;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        h1 {
+            color: #c8aa6e;
+            font-size: 26px;
+            letter-spacing: 1px;
+            text-shadow: 0 0 12px rgba(200, 170, 110, 0.6);
+            margin-bottom: 5px;
+        }
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 15px;
+            color: #a09b8c;
+            justify-content: center;
+            align-items: center;
+        }
+        .stats-bar span b {
+            color: #00d2ff;
+        }
+
+        /* 말파이트 게임과 완전히 동일한 850px x 380px 규격 */
+        #game-wrapper {
+            position: relative;
+            width: 850px;
+            height: 380px;
+            border: 3px solid #785a28;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 50px rgba(0,0,0,0.5);
+            background: radial-gradient(circle, #101c2c 0%, #060e18 100%);
+            cursor: crosshair;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 상단 UI 오버레이 */
+        .hud-overlay {
+            position: absolute;
+            top: 15px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 25px;
+            pointer-events: none;
+        }
+        .ammo-container {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .ammo-slot {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #151d24;
+            border: 2px solid #444;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            transition: all 0.2s;
+        }
+        .ammo-slot.ready {
+            background: radial-gradient(circle, #00ffff, #0077aa);
+            border-color: #00ffff;
+            box-shadow: 0 0 10px #00d2ff;
+        }
+
+        .target-hp-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .hp-bar-bg {
+            width: 140px;
+            height: 14px;
+            background: #111;
+            border: 1px solid #785a28;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .hp-bar-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #e84057, #ff6b81);
+            transition: width 0.2s ease-out;
+        }
+
+        /* 하단 컨트롤 */
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .btn {
+            background: linear-gradient(180deg, #1e2328, #111519);
+            border: 2px solid #c8aa6e;
+            color: #f0e6d2;
+            padding: 9px 22px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .btn:hover {
+            border-color: #f0e6d2;
+            background: #1e282d;
+        }
+        .btn:active {
+            transform: scale(0.96);
+        }
+        .btn-restart {
+            border-color: #00d2ff;
+            color: #70e6ff;
+        }
+        .btn-restart:hover {
+            border-color: #00ffff;
+            color: #fff;
+        }
+
+        .instruction {
+            color: #a09b8c;
+            font-size: 13.5px;
+            line-height: 1.6;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .instruction span { color: #f0e6d2; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <h1>제라스 궁 저격 훈련소 (Rite of the Arcane)</h1>
+        <div class="stats-bar">
+            <span>현재 스테이지: <b id="stage-txt">1</b></span>
+            <span>최고 기록: <b id="best-stage-txt">1</b></span>
+            <span>적중률: <b id="accuracy-txt">100%</b></span>
+        </div>
+    </div>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="850" height="380"></canvas>
+        <div class="hud-overlay">
+            <div class="ammo-container" id="ammo-container"></div>
+            <div class="target-hp-wrap">
+                <span>상대 HP</span>
+                <div class="hp-bar-bg">
+                    <div id="target-hp" class="hp-bar-fill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button class="btn btn-restart" onclick="restartGame()">🔄 다시 시작 (Enter)</button>
+    </div>
+
+    <div class="instruction">
+        🎯 <b>조작법:</b> <span>마우스 조준</span> 후 <span>[좌클릭]</span> 또는 <span>[Space / R]</span> 로 포격 발사!<br>
+        ⏱️ <b>연사 제한:</b> 탄환 간 <b>약 0.55초의 딜레이</b>가 있습니다. (조준경 게이지 확인 후 발사)<br>
+        ⌨️ <b>리겜 단축키:</b> <span>[Enter]</span> 키로 언제든 1단계부터 재시작 가능
+    </div>
+
+    <script>
+        // Web Audio API 사운드 효과
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+
+            if (type === 'fire') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(850, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'impact') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(35, now + 0.35);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'hit') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(650, now);
+                osc.frequency.linearRampToValueAtTime(1300, now + 0.1);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (type === 'dash') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 게임 변수
+        let stage = 1;
+        let bestStage = 1;
+        let totalShots = 0;
+        let hitShots = 0;
+        let isGameOver = false;
+        let isStageCleared = false;
+        let gameStatusText = "";
+
+        // 제라스 발사 딜레이 & 사양
+        const MAX_AMMO = 5;
+        let currentAmmo = MAX_AMMO;
+        const ULT_RADIUS = 48;             // 포격 폭발 반경
+        const ULT_FALL_TIME = 550;         // 포격 낙하 시간 (ms)
+        const SHOT_COOLDOWN = 550;         // 발사 간 쿨타임 (연사 방지 딜레이)
+        let lastShotTime = 0;
+
+        let mousePos = { x: 425, y: 190 };
+        let activeStrikes = [];
+        let visualParticles = [];
+        let hitTexts = [];
+
+        // 상대 챔피언 객체
+        const target = {
+            x: 425,
+            y: 190,
+            radius: 17,
+            maxHp: 2,
+            hp: 2,
+            speed: 2.2,
+            vx: 0,
+            vy: 0,
+            targetX: 425,
+            targetY: 190,
+            changeDirTimer: 0,
+            dashCooldown: 0,
+            isHitFlash: 0
+        };
+
+        function updateHUD() {
+            document.getElementById('stage-txt').innerText = stage;
+            document.getElementById('best-stage-txt').innerText = bestStage;
+            const acc = totalShots === 0 ? 100 : Math.round((hitShots / totalShots) * 100);
+            document.getElementById('accuracy-txt').innerText = `${acc}%`;
+
+            const ammoContainer = document.getElementById('ammo-container');
+            ammoContainer.innerHTML = '';
+            for (let i = 0; i < MAX_AMMO; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'ammo-slot' + (i < currentAmmo ? ' ready' : '');
+                ammoContainer.appendChild(slot);
+            }
+
+            const hpPercent = Math.max(0, (target.hp / target.maxHp) * 100);
+            document.getElementById('target-hp').style.width = `${hpPercent}%`;
+        }
+
+        function initStage() {
+            isStageCleared = false;
+            currentAmmo = MAX_AMMO;
+            target.maxHp = (stage >= 4) ? 3 : 2;
+            target.hp = target.maxHp;
+
+            target.speed = 2.2 + Math.min(2.4, stage * 0.35);
+            target.x = 150 + Math.random() * 550;
+            target.y = 80 + Math.random() * 220;
+            pickNewTargetPos();
+
+            gameStatusText = `STAGE ${stage} - 상대를 저격하세요!`;
+            updateHUD();
+        }
+
+        function pickNewTargetPos() {
+            const margin = 50;
+            target.targetX = margin + Math.random() * (canvas.width - margin * 2);
+            target.targetY = margin + Math.random() * (canvas.height - margin * 2);
+            target.changeDirTimer = Math.max(20, 70 - stage * 6);
+        }
+
+        function updateTargetAI() {
+            target.changeDirTimer--;
+            if (target.changeDirTimer <= 0) {
+                pickNewTargetPos();
+            }
+
+            // 날아오는 포격 회피
+            if (stage >= 2 && activeStrikes.length > 0) {
+                const strike = activeStrikes[0];
+                const distToStrike = Math.hypot(target.x - strike.x, target.y - strike.y);
+
+                if (distToStrike < ULT_RADIUS + 30) {
+                    if (stage >= 4 && target.dashCooldown <= 0) {
+                        const escapeAngle = Math.atan2(target.y - strike.y, target.x - strike.x);
+                        target.x += Math.cos(escapeAngle) * 90;
+                        target.y += Math.sin(escapeAngle) * 90;
+                        target.dashCooldown = 180;
+                        playSound('dash');
+                        createFlashParticles(target.x, target.y);
+                    } else {
+                        const escapeAngle = Math.atan2(target.y - strike.y, target.x - strike.x);
+                        target.vx = Math.cos(escapeAngle) * target.speed * 1.35;
+                        target.vy = Math.sin(escapeAngle) * target.speed * 1.35;
+                    }
+                }
+            } else {
+                const dx = target.targetX - target.x;
+                const dy = target.targetY - target.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < 10) {
+                    pickNewTargetPos();
+                } else {
+                    target.vx = (dx / dist) * target.speed;
+                    target.vy = (dy / dist) * target.speed;
+                }
+            }
+
+            target.x += target.vx;
+            target.y += target.vy;
+
+            target.x = Math.max(target.radius, Math.min(canvas.width - target.radius, target.x));
+            target.y = Math.max(target.radius, Math.min(canvas.height - target.radius, target.y));
+
+            if (target.dashCooldown > 0) target.dashCooldown--;
+            if (target.isHitFlash > 0) target.isHitFlash--;
+        }
+
+        // 포격 발사 (연사 제한 딜레이 적용)
+        function shootStrike() {
+            if (isGameOver || isStageCleared || currentAmmo <= 0) return;
+
+            const now = performance.now();
+            // 딜레이가 아직 안 끝났으면 발사 불가
+            if (now - lastShotTime < SHOT_COOLDOWN) return;
+
+            lastShotTime = now;
+            currentAmmo--;
+            totalShots++;
+            playSound('fire');
+
+            const strike = {
+                x: mousePos.x,
+                y: mousePos.y,
+                radius: ULT_RADIUS,
+                startTime: now,
+                impactTime: now + ULT_FALL_TIME,
+                isDone: false
+            };
+            activeStrikes.push(strike);
+            updateHUD();
+
+            setTimeout(() => {
+                checkRoundEnd();
+            }, ULT_FALL_TIME + 150);
+        }
+
+        function checkRoundEnd() {
+            if (isStageCleared || isGameOver) return;
+            if (currentAmmo === 0 && activeStrikes.length === 0 && target.hp > 0) {
+                isGameOver = true;
+                gameStatusText = "탄환 소진! 상대를 놓쳤습니다. [Enter]로 재도전";
+            }
+        }
+
+        function resolveStrikeImpact(strike) {
+            playSound('impact');
+            createExplosionParticles(strike.x, strike.y);
+
+            const dist = Math.hypot(target.x - strike.x, target.y - strike.y);
+
+            if (dist <= strike.radius + target.radius * 0.8) {
+                hitShots++;
+                target.hp--;
+                target.isHitFlash = 12;
+                playSound('hit');
+
+                hitTexts.push({
+                    text: "HIT! (500)",
+                    x: target.x,
+                    y: target.y - 20,
+                    alpha: 1.0
+                });
+
+                updateHUD();
+
+                if (target.hp <= 0) {
+                    isStageCleared = true;
+                    stage++;
+                    if (stage > bestStage) bestStage = stage;
+                    gameStatusText = "🎯 적 처치 성공! 다음 단계로 진입합니다...";
+
+                    setTimeout(() => {
+                        initStage();
+                    }, 1200);
+                }
+            }
+        }
+
+        function createExplosionParticles(x, y) {
+            for (let i = 0; i < 24; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 6;
+                visualParticles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1.0,
+                    decay: 0.03 + Math.random() * 0.03,
+                    color: Math.random() > 0.4 ? '#00ffff' : '#0ac8b9',
+                    size: 3 + Math.random() * 4
+                });
+            }
+        }
+
+        function createFlashParticles(x, y) {
+            for (let i = 0; i < 15; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 4;
+                visualParticles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 0.8,
+                    decay: 0.04,
+                    color: '#ffff80',
+                    size: 3
+                });
+            }
+        }
+
+        // 메인 렌더링
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 배경 가이드 라인
+            ctx.strokeStyle = "rgba(200, 170, 110, 0.05)";
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 40) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += 40) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
+
+            const now = performance.now();
+
+            // 1. 낙하 중인 포격
+            for (let i = activeStrikes.length - 1; i >= 0; i--) {
+                const s = activeStrikes[i];
+                const progress = (now - s.startTime) / ULT_FALL_TIME;
+
+                if (progress >= 1) {
+                    resolveStrikeImpact(s);
+                    activeStrikes.splice(i, 1);
+                    continue;
+                }
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(0, 210, 255, 0.12)";
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "rgba(0, 255, 255, 0.6)";
+                ctx.stroke();
+
+                const currentRadius = s.radius * (1 - progress);
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, Math.max(1, currentRadius), 0, Math.PI * 2);
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            }
+
+            // 2. 상대 챔피언
+            if (!isStageCleared || target.hp > 0) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2);
+
+                if (target.isHitFlash > 0) {
+                    ctx.fillStyle = "#ffffff";
+                } else {
+                    ctx.fillStyle = "radial-gradient(circle, #e84057, #7a1526)";
+                }
+                ctx.fill();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = "#ff7688";
+                ctx.stroke();
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 11px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("적", target.x, target.y);
+                ctx.restore();
+            }
+
+            // 3. 파티클
+            for (let i = visualParticles.length - 1; i >= 0; i--) {
+                const p = visualParticles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= p.decay;
+
+                if (p.life <= 0) {
+                    visualParticles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 4. 대미지 팝업
+            for (let i = hitTexts.length - 1; i >= 0; i--) {
+                const t = hitTexts[i];
+                t.y -= 0.8;
+                t.alpha -= 0.02;
+
+                if (t.alpha <= 0) {
+                    hitTexts.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = t.alpha;
+                ctx.fillStyle = "#ffdf7a";
+                ctx.font = "bold 16px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(t.text, t.x, t.y);
+                ctx.restore();
+            }
+
+            // 5. 마우스 조준경 & 재장전 쿨타임 게이지 표시
+            if (!isGameOver) {
+                const cdProgress = Math.min(1, (now - lastShotTime) / SHOT_COOLDOWN);
+                const isReady = cdProgress >= 1;
+
+                ctx.save();
+
+                // 외곽 조준 범위 원
+                ctx.beginPath();
+                ctx.arc(mousePos.x, mousePos.y, ULT_RADIUS, 0, Math.PI * 2);
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = isReady ? "rgba(0, 210, 255, 0.5)" : "rgba(100, 100, 100, 0.3)";
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // 딜레이 충전 게이지 호(Arc)
+                if (!isReady) {
+                    ctx.beginPath();
+                    ctx.arc(mousePos.x, mousePos.y, 22, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * cdProgress));
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = "#00d2ff";
+                    ctx.stroke();
+                }
+
+                // 십자선
+                ctx.strokeStyle = isReady ? "#00ffff" : "rgba(255, 255, 255, 0.3)";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(mousePos.x - 10, mousePos.y); ctx.lineTo(mousePos.x + 10, mousePos.y);
+                ctx.moveTo(mousePos.x, mousePos.y - 10); ctx.lineTo(mousePos.x, mousePos.y + 10);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            // 6. 안내 문구
+            if (gameStatusText) {
+                ctx.save();
+                ctx.font = "bold 17px sans-serif";
+                ctx.fillStyle = isGameOver ? "#e84057" : (isStageCleared ? "#0ac8b9" : "#c8aa6e");
+                ctx.textAlign = "center";
+                ctx.shadowColor = "#000";
+                ctx.shadowBlur = 6;
+                ctx.fillText(gameStatusText, canvas.width / 2, canvas.height - 20);
+                ctx.restore();
+            }
+
+            if (!isGameOver) {
+                updateTargetAI();
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // 이벤트 리스너
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mousePos.x = e.clientX - rect.left;
+            mousePos.y = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) shootStrike();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const key = e.key.toLowerCase();
+
+            if (key === 'r' || key === ' ' || key === 'spacebar') {
+                e.preventDefault();
+                shootStrike();
+            } else if (key === 'enter') {
+                e.preventDefault();
+                restartGame();
+            }
+        });
+
+        function restartGame() {
+            stage = 1;
+            totalShots = 0;
+            hitShots = 0;
+            lastShotTime = 0;
+            isGameOver = false;
+            activeStrikes = [];
+            visualParticles = [];
+            hitTexts = [];
+            initStage();
+        }
+
+        initStage();
+        requestAnimationFrame(draw);
+    </script>
+</body>
+</html>

@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>말파 궁 플로 반응하기 (LoL 미니게임)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #091428;
+            color: #f0e6d2;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        h1 {
+            color: #c8aa6e;
+            font-size: 28px;
+            text-shadow: 0 0 10px rgba(200, 170, 110, 0.5);
+            margin-bottom: 5px;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 16px;
+            color: #a09b8c;
+            justify-content: center;
+        }
+        .stats span b {
+            color: #0ac8b9;
+        }
+
+        #game-container {
+            position: relative;
+            width: 850px;
+            height: 380px;
+            background: radial-gradient(circle, #1e282d 0%, #0a141e 100%);
+            border: 3px solid #785a28;
+            border-radius: 8px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.8), inset 0 0 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        /* 바닥 라인 */
+        .ground-line {
+            position: absolute;
+            bottom: 80px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(200, 170, 110, 0.3), transparent);
+        }
+
+        /* 챔피언 공통 스타일 */
+        .champion {
+            position: absolute;
+            bottom: 80px;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 13px;
+            box-shadow: 0 10px 15px rgba(0,0,0,0.5);
+            transition: transform 0.05s ease;
+        }
+        .hp-bar {
+            position: absolute;
+            top: -18px;
+            left: 5px;
+            width: 60px;
+            height: 8px;
+            background: #222;
+            border: 1px solid #000;
+            border-radius: 2px;
+        }
+        .hp-fill {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 말파이트 */
+        #malphite {
+            left: 100px;
+            background: radial-gradient(circle, #8d7b68, #4a3b32);
+            border: 3px solid #a78b71;
+            color: #fff;
+        }
+        #malphite .hp-fill { background: #e84057; }
+
+        /* 플레이어 */
+        #player {
+            left: 650px;
+            background: radial-gradient(circle, #e2b755, #a37217);
+            border: 3px solid #f0e6d2;
+            color: #091428;
+        }
+        #player .hp-fill { background: #0ac8b9; }
+
+        /* 스킬 이펙트 */
+        .ult-trail {
+            position: absolute;
+            bottom: 80px;
+            height: 70px;
+            background: linear-gradient(90deg, rgba(232, 64, 87, 0.4), rgba(232, 64, 87, 0.9));
+            box-shadow: 0 0 25px #e84057;
+            border-radius: 35px;
+            display: none;
+        }
+        .flash-effect {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: flashPop 0.35s ease-out forwards;
+        }
+        @keyframes flashPop {
+            0% { width: 10px; height: 10px; opacity: 1; background: #ffff80; box-shadow: 0 0 20px #ffea00; }
+            100% { width: 100px; height: 100px; opacity: 0; background: #ffea00; }
+        }
+        .belt-missile {
+            position: absolute;
+            width: 16px;
+            height: 4px;
+            background: #00d2ff;
+            box-shadow: 0 0 8px #00d2ff;
+            border-radius: 2px;
+        }
+
+        /* UI 메시지 */
+        #status-msg {
+            position: absolute;
+            top: 30px;
+            width: 100%;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 2px 4px #000;
+        }
+        #reaction-time {
+            position: absolute;
+            top: 70px;
+            width: 100%;
+            text-align: center;
+            font-size: 18px;
+            color: #0ac8b9;
+        }
+
+        /* 안내 및 버튼 */
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .btn {
+            background: linear-gradient(180deg, #1e2328, #111519);
+            border: 2px solid #c8aa6e;
+            color: #f0e6d2;
+            padding: 10px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .btn:hover {
+            border-color: #f0e6d2;
+            background: #1e282d;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .btn-restart {
+            border-color: #e84057;
+            color: #ff7688;
+        }
+        .btn-restart:hover {
+            border-color: #ff7688;
+            color: #fff;
+        }
+
+        .instruction {
+            color: #a09b8c;
+            font-size: 14px;
+            line-height: 1.6;
+            text-align: center;
+            margin-top: 12px;
+        }
+        .instruction span { color: #f0e6d2; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <h1>말파 궁 점멸로 피하기</h1>
+        <div class="stats">
+            <span>현재 스테이지: <b id="stage-txt">1</b></span>
+            <span>최고 점수: <b id="best-stage-txt">1</b></span>
+            <span>최근 반응속도: <b id="last-ms-txt">-</b></span>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div class="ground-line"></div>
+        <div id="ult-trail" class="ult-trail"></div>
+        
+        <div id="malphite" class="champion">
+            <div class="hp-bar"><div class="hp-fill"></div></div>
+            말파
+        </div>
+
+        <div id="player" class="champion">
+            <div class="hp-bar"><div class="hp-fill"></div></div>
+            나
+        </div>
+
+        <div id="status-msg">말파이트가 진입 타이밍을 노리는 중...</div>
+        <div id="reaction-time"></div>
+    </div>
+
+    <div id="controls">
+        <button id="flash-btn" class="btn" onclick="triggerPlayerFlash()">⚡ 점멸 (D / F / Space)</button>
+        <button id="restart-btn" class="btn btn-restart" onclick="restartGame()">🔄 다시 시작 (R)</button>
+    </div>
+
+    <div class="instruction">
+        ⚠️ <b>주의:</b> 말파이트가 <b>궁극기(R)</b>를 쓸 때만 점멸을 써야 합니다!<br>
+        <b>벨트</b>나 <b>점멸 페이크</b>에 낚여서 점멸을 쓰면 즉시 <b>패배</b>합니다.<br>
+        ⌨️ <b>조작키:</b> 점멸 [<span>D</span> / <span>F</span> / <span>Space</span>] | 다시 시작 [<span>R</span>]
+    </div>
+
+    <script>
+        // Web Audio API 사운드 생성기
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+
+            if (type === 'flash') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.2);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'ult') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.linearRampToValueAtTime(250, now + 0.15);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'belt') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.linearRampToValueAtTime(300, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'hit') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.5);
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+        }
+
+        // 게임 상태 변수
+        let stage = 1;
+        let bestStage = 1;
+        let currentAction = null;   // 'ULT', 'BELT', 'FLASH'
+        let actionStartTime = 0;
+        let isGameOver = false;
+
+        // 모든 타이머 배열 (초기화용)
+        let activeTimeouts = [];
+
+        function setSafeTimeout(cb, delay) {
+            const id = setTimeout(() => {
+                cb();
+                activeTimeouts = activeTimeouts.filter(t => t !== id);
+            }, delay);
+            activeTimeouts.push(id);
+            return id;
+        }
+
+        function clearAllTimeouts() {
+            activeTimeouts.forEach(id => clearTimeout(id));
+            activeTimeouts = [];
+        }
+
+        const malphiteEl = document.getElementById('malphite');
+        const playerEl = document.getElementById('player');
+        const statusMsgEl = document.getElementById('status-msg');
+        const reactionTxtEl = document.getElementById('reaction-time');
+        const stageTxtEl = document.getElementById('stage-txt');
+        const bestStageTxtEl = document.getElementById('best-stage-txt');
+        const lastMsTxtEl = document.getElementById('last-ms-txt');
+
+        // 난이도 (스테이지가 올라갈수록 반응 가능 시간이 줄어듦)
+        function getUltReactWindow() {
+            return Math.max(160, 430 - (stage * 24)); 
+        }
+
+        function startGameRound() {
+            if (isGameOver) return;
+
+            resetPositions();
+            statusMsgEl.innerText = "말파이트가 진입각을 재고 있습니다...";
+            statusMsgEl.style.color = "#f0e6d2";
+            reactionTxtEl.innerText = "";
+            currentAction = null;
+
+            const delay = Math.random() * 2500 + 1500;
+
+            setSafeTimeout(() => {
+                if (!isGameOver) executeMalphiteAction();
+            }, delay);
+        }
+
+        function resetPositions() {
+            malphiteEl.style.transition = 'all 0.15s';
+            playerEl.style.transition = 'all 0.15s';
+            malphiteEl.style.left = '100px';
+            malphiteEl.style.bottom = '80px';
+            playerEl.style.left = '650px';
+            playerEl.style.bottom = '80px';
+            document.getElementById('ult-trail').style.display = 'none';
+
+            // 남아있는 투사체 제거
+            document.querySelectorAll('.belt-missile, .flash-effect').forEach(el => el.remove());
+        }
+
+        function createFlashVFX(x, y) {
+            const fx = document.createElement('div');
+            fx.className = 'flash-effect';
+            fx.style.left = (x - 35) + 'px';
+            fx.style.top = (y - 35) + 'px';
+            document.getElementById('game-container').appendChild(fx);
+            setTimeout(() => fx.remove(), 400);
+        }
+
+        function executeMalphiteAction() {
+            const fakeChance = Math.min(0.55, 0.2 + stage * 0.04);
+            const roll = Math.random();
+
+            if (roll < fakeChance * 0.5) {
+                currentAction = 'FLASH';
+            } else if (roll < fakeChance) {
+                currentAction = 'BELT';
+            } else {
+                currentAction = 'ULT';
+            }
+
+            actionStartTime = performance.now();
+
+            if (currentAction === 'ULT') {
+                const ultDuration = getUltReactWindow();
+                playSound('ult');
+
+                const trail = document.getElementById('ult-trail');
+                trail.style.display = 'block';
+                trail.style.left = '120px';
+                trail.style.width = '550px';
+
+                malphiteEl.style.transition = `left ${ultDuration}ms cubic-bezier(0.2, 0.8, 0.2, 1)`;
+                malphiteEl.style.left = '630px';
+
+                setSafeTimeout(() => {
+                    if (currentAction === 'ULT' && !isGameOver) {
+                        malphiteHitsPlayer();
+                    }
+                }, ultDuration);
+
+            } else if (currentAction === 'BELT') {
+                playSound('belt');
+                malphiteEl.style.transition = 'left 0.15s ease-out';
+                malphiteEl.style.left = '220px';
+
+                for (let i = -1; i <= 1; i++) {
+                    const missile = document.createElement('div');
+                    missile.className = 'belt-missile';
+                    missile.style.left = '220px';
+                    missile.style.bottom = (110 + i * 20) + 'px';
+                    document.getElementById('game-container').appendChild(missile);
+
+                    missile.animate([
+                        { transform: 'translateX(0)', opacity: 1 },
+                        { transform: 'translateX(350px)', opacity: 0 }
+                    ], { duration: 350, fill: 'forwards' });
+
+                    setTimeout(() => missile.remove(), 400);
+                }
+
+                setSafeTimeout(() => {
+                    if (!isGameOver) {
+                        statusMsgEl.innerText = "마공벨트 페이크였습니다! 침착하네요 👍";
+                        statusMsgEl.style.color = "#0ac8b9";
+                        setSafeTimeout(startGameRound, 1000);
+                    }
+                }, 700);
+
+            } else if (currentAction === 'FLASH') {
+                playSound('flash');
+                createFlashVFX(100, 260);
+                malphiteEl.style.transition = 'none';
+                malphiteEl.style.left = '280px';
+                createFlashVFX(280, 260);
+
+                setSafeTimeout(() => {
+                    if (!isGameOver) {
+                        statusMsgEl.innerText = "점멸 페이크였습니다! 반응 잘 참았습니다 👍";
+                        statusMsgEl.style.color = "#0ac8b9";
+                        setSafeTimeout(startGameRound, 1000);
+                    }
+                }, 700);
+            }
+        }
+
+        // 플레이어 점멸 입력
+        function triggerPlayerFlash() {
+            if (isGameOver) return;
+
+            const now = performance.now();
+            playSound('flash');
+            createFlashVFX(650, 260);
+
+            playerEl.style.transition = 'none';
+            playerEl.style.left = '760px';
+            playerEl.style.bottom = '180px';
+            createFlashVFX(760, 160);
+
+            if (currentAction === 'ULT') {
+                clearAllTimeouts();
+                const reactionMs = Math.round(now - actionStartTime);
+                lastMsTxtEl.innerText = reactionMs + "ms";
+                
+                statusMsgEl.innerText = `반응 성공! (${reactionMs}ms) 궁을 완벽히 피했습니다!`;
+                statusMsgEl.style.color = "#0ac8b9";
+                reactionTxtEl.innerText = `반응속도: ${reactionMs} ms`;
+
+                currentAction = null;
+                stage++;
+                if (stage > bestStage) bestStage = stage;
+                updateStats();
+
+                setSafeTimeout(startGameRound, 1400);
+
+            } else if (currentAction === 'BELT') {
+                gameOver("마공벨트 페이크에 낚여서 점멸을 뺐습니다! (점멸 낭비 패배)");
+            } else if (currentAction === 'FLASH') {
+                gameOver("말파이트의 점멸 페이크에 속아 반응해버렸습니다! (점멸 낭비 패배)");
+            } else {
+                gameOver("말파이트가 아무것도 안 썼는데 쫄플을 썼습니다!");
+            }
+        }
+
+        // 궁 맞았을 때 에어본
+        function malphiteHitsPlayer() {
+            playSound('hit');
+            playerEl.style.transition = 'bottom 0.25s cubic-bezier(0.1, 0.9, 0.2, 1)';
+            playerEl.style.bottom = '230px';
+
+            setTimeout(() => {
+                playerEl.style.transition = 'bottom 0.3s ease-in';
+                playerEl.style.bottom = '80px';
+            }, 300);
+
+            gameOver("말파이트 궁극기에 직격당해 공중에 떴습니다! (사망)");
+        }
+
+        function gameOver(reason) {
+            isGameOver = true;
+            clearAllTimeouts();
+            statusMsgEl.innerText = reason;
+            statusMsgEl.style.color = "#e84057";
+            reactionTxtEl.innerText = `최종 도달: ${stage} 스테이지 | [R] 키로 재도전`;
+        }
+
+        // 언제든 게임을 초기화하고 다시 시작
+        function restartGame() {
+            clearAllTimeouts();
+            isGameOver = false;
+            stage = 1;
+            currentAction = null;
+            updateStats();
+            startGameRound();
+        }
+
+        function updateStats() {
+            stageTxtEl.innerText = stage;
+            bestStageTxtEl.innerText = bestStage;
+        }
+
+        // 키보드 조작 매핑
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const key = e.key.toLowerCase();
+
+            // 점멸 키 (D, F, Space)
+            if (key === 'd' || key === 'f' || key === ' ' || key === 'spacebar') {
+                e.preventDefault();
+                triggerPlayerFlash();
+            }
+
+            // 다시 시작 키 (R)
+            if (key === 'r') {
+                e.preventDefault();
+                restartGame();
+            }
+        });
+
+        // 최초 실행
+        startGameRound();
+    </script>
+</body>
+</html>
